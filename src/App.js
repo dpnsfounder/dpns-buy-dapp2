@@ -1,19 +1,19 @@
 import React, { useState } from "react";
-import WalletConnectProvider from "@walletconnect/web3-provider";
 import Web3 from "web3";
-import { verifyTransactionHash } from "./verifyTransaction";
 
 export default function App() {
   const [walletAddress, setWalletAddress] = useState("");
-  const [txHash, setTxHash] = useState("");
+  const [transactionHash, setTransactionHash] = useState("");
+  const [status, setStatus] = useState("");
+  const [isVerified, setIsVerified] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const connectMetaMask = async () => {
     if (window.ethereum) {
       try {
-        const accounts = await window.ethereum.request({
-          method: "eth_requestAccounts",
-        });
+        const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
         setWalletAddress(accounts[0]);
+        setStatus("Wallet connected.");
       } catch (err) {
         alert("MetaMask connection failed.");
       }
@@ -22,70 +22,73 @@ export default function App() {
     }
   };
 
-  const connectWalletConnect = async () => {
-    try {
-      const provider = new WalletConnectProvider({
-        rpc: {
-          56: "https://bsc-dataseed.binance.org/", // BNB Chain Mainnet
-        },
-      });
-
-      await provider.enable();
-      const web3 = new Web3(provider);
-      const accounts = await web3.eth.getAccounts();
-      setWalletAddress(accounts[0]);
-
-      provider.on("disconnect", () => {
-        setWalletAddress("");
-      });
-    } catch (err) {
-      alert("WalletConnect failed.");
-    }
-  };
-
-  const handleClaim = () => {
-    if (!txHash) {
-      alert("Please enter a transaction hash.");
+  const verifyTransaction = async () => {
+    if (!transactionHash || transactionHash.length !== 66) {
+      setStatus("❌ Invalid transaction hash.");
       return;
     }
 
-    if (verifyTransactionHash(txHash)) {
-      alert("✅ Transaction verified! DPNS will be credited.");
-    } else {
-      alert("❌ Transaction not recognized. Please check your hash.");
+    setLoading(true);
+    setStatus("⏳ Verifying transaction...");
+
+    try {
+      const web3 = new Web3("https://bsc-dataseed.binance.org/");
+      const tx = await web3.eth.getTransaction(transactionHash);
+
+      if (tx && tx.to && tx.from && tx.value && tx.hash === transactionHash.toLowerCase()) {
+        setIsVerified(true);
+        setStatus("✅ Transaction verified. DPNS will be credited.");
+      } else {
+        setIsVerified(false);
+        setStatus("❌ Transaction not found or invalid.");
+      }
+    } catch (err) {
+      setStatus("❌ Error verifying transaction.");
     }
+
+    setLoading(false);
   };
 
   return (
-    <div style={{ fontFamily: "Arial", textAlign: "center", marginTop: "50px" }}>
-      <h1>DPNS Buy DApp</h1>
-      {walletAddress ? (
-        <>
-          <p>
-            Connected: <b>{walletAddress}</b>
-          </p>
-          <input
-            type="text"
-            placeholder="Paste BNB transaction hash"
-            value={txHash}
-            onChange={(e) => setTxHash(e.target.value)}
-            style={{ padding: "10px", width: "300px" }}
-          />
-          <br /><br />
-          <button onClick={handleClaim} style={{ padding: "10px 20px" }}>
-            Verify & Claim DPNS
-          </button>
-        </>
+    <div style={{ padding: 20, fontFamily: "Arial", maxWidth: 600, margin: "auto" }}>
+      <h1>Buy DPNS</h1>
+
+      {!walletAddress ? (
+        <button onClick={connectMetaMask} style={{ padding: 10, fontSize: 16 }}>
+          Connect Wallet
+        </button>
       ) : (
-        <>
-          <p><b>Choose Wallet:</b></p>
-          <button onClick={connectMetaMask} style={{ margin: "10px", padding: "10px 20px" }}>
-            Connect MetaMask
-          </button>
-          <button onClick={connectWalletConnect} style={{ margin: "10px", padding: "10px 20px" }}>
-            WalletConnect (TrustWallet, SafePal, etc.)
-          </button>
-        </>
+        <p><strong>Connected:</strong> {walletAddress}</p>
+      )}
+
+      <input
+        type="text"
+        placeholder="Paste transaction hash"
+        value={transactionHash}
+        onChange={(e) => setTransactionHash(e.target.value)}
+        style={{ width: "100%", padding: 10, fontSize: 14, marginTop: 20 }}
+      />
+
+      <button
+        onClick={verifyTransaction}
+        disabled={loading || !walletAddress}
+        style={{
+          padding: 10,
+          fontSize: 16,
+          marginTop: 10,
+          backgroundColor: "#007bff",
+          color: "#fff",
+          border: "none",
+          cursor: "pointer"
+        }}
+      >
+        {loading ? "Verifying..." : "Submit Transaction"}
+      </button>
+
+      {status && (
+        <div style={{ marginTop: 20, fontWeight: "bold", color: isVerified ? "green" : "black" }}>
+          {status}
+        </div>
       )}
     </div>
   );
