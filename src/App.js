@@ -1,83 +1,80 @@
-import React, { useState, useEffect } from "react";
-import Web3Modal from "web3modal";
+import React, { useState } from "react";
 import WalletConnectProvider from "@walletconnect/web3-provider";
-import { ethers } from "ethers";
+import Web3 from "web3";
 
-function App() {
-  const [walletAddress, setWalletAddress] = useState(null);
-  const [provider, setProvider] = useState(null);
-  const [transactionHash, setTransactionHash] = useState("");
-  const [status, setStatus] = useState("");
+export default function App() {
+  const [walletAddress, setWalletAddress] = useState("");
+  const [txHash, setTxHash] = useState("");
 
-  // Configure WalletConnect
-  const web3Modal = new Web3Modal({
-    cacheProvider: false,
-    providerOptions: {
-      walletconnect: {
-        package: WalletConnectProvider,
-        options: {
-          rpc: {
-            56: "https://bsc-dataseed.binance.org/", // BNB Chain Mainnet
-          },
-        },
-      },
-    },
-  });
-
-  const connectWallet = async () => {
-    try {
-      const instance = await web3Modal.connect();
-      const provider = new ethers.providers.Web3Provider(instance);
-      const signer = provider.getSigner();
-      const address = await signer.getAddress();
-
-      setProvider(provider);
-      setWalletAddress(address);
-      setStatus("Wallet connected successfully.");
-    } catch (error) {
-      console.error("Wallet connection failed:", error);
-      setStatus("Wallet connection failed.");
+  const connectMetaMask = async () => {
+    if (window.ethereum) {
+      try {
+        const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+        setWalletAddress(accounts[0]);
+      } catch (err) {
+        alert("MetaMask connection failed.");
+      }
+    } else {
+      alert("MetaMask not installed.");
     }
   };
 
-  const handleVerifyTransaction = () => {
-    if (!transactionHash) {
-      setStatus("Please enter a transaction hash.");
-      return;
-    }
+  const connectWalletConnect = async () => {
+    try {
+      const provider = new WalletConnectProvider({
+        rpc: {
+          56: "https://bsc-dataseed.binance.org/", // BNB Chain Mainnet
+        },
+      });
 
-    setStatus("Verifying BNB transaction hash: " + transactionHash);
-    // Simulate the logic to handle verification...
-    setTimeout(() => {
-      setStatus("✅ Transaction verified and DPNS claimed!");
-    }, 2000);
+      await provider.enable();
+      const web3 = new Web3(provider);
+      const accounts = await web3.eth.getAccounts();
+      setWalletAddress(accounts[0]);
+
+      // Optional: close session when done
+      provider.on("disconnect", () => {
+        setWalletAddress("");
+      });
+    } catch (err) {
+      alert("WalletConnect failed.");
+    }
+  };
+
+  const handleClaim = () => {
+    if (!txHash) return alert("Please enter a transaction hash.");
+    alert(`✅ Transaction hash submitted: ${txHash}\n\n(Verification logic coming soon)`);
   };
 
   return (
-    <div style={{ padding: "30px", fontFamily: "Arial, sans-serif" }}>
+    <div style={{ fontFamily: "Arial", textAlign: "center", marginTop: "50px" }}>
       <h1>DPNS Buy DApp</h1>
-
-      {!walletAddress ? (
-        <button onClick={connectWallet}>Connect Wallet</button>
+      {walletAddress ? (
+        <>
+          <p>Connected: <b>{walletAddress}</b></p>
+          <input
+            type="text"
+            placeholder="Paste BNB transaction hash"
+            value={txHash}
+            onChange={(e) => setTxHash(e.target.value)}
+            style={{ padding: "10px", width: "300px" }}
+          />
+          <br /><br />
+          <button onClick={handleClaim} style={{ padding: "10px 20px" }}>
+            Verify & Claim DPNS
+          </button>
+        </>
       ) : (
-        <p>Connected: {walletAddress}</p>
+        <>
+          <p><b>Choose Wallet:</b></p>
+          <button onClick={connectMetaMask} style={{ margin: "10px", padding: "10px 20px" }}>
+            Connect MetaMask
+          </button>
+          <button onClick={connectWalletConnect} style={{ margin: "10px", padding: "10px 20px" }}>
+            WalletConnect (TrustWallet, SafePal, etc.)
+          </button>
+        </>
       )}
-
-      <input
-        type="text"
-        placeholder="Paste BNB transaction hash"
-        value={transactionHash}
-        onChange={(e) => setTransactionHash(e.target.value)}
-        style={{ display: "block", marginTop: "20px", width: "300px" }}
-      />
-
-      <button onClick={handleVerifyTransaction} style={{ marginTop: "10px" }}>
-        Verify & Claim DPNS
-      </button>
-
-      <p style={{ marginTop: "20px", color: "green" }}>{status}</p>
     </div>
   );
 }
-
-export default App;
