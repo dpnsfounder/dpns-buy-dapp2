@@ -1,10 +1,29 @@
-import React from "react";
+import React, { useState } from "react";
 
 function App() {
+  const [walletAddress, setWalletAddress] = useState(null);
+
+  async function connectWallet() {
+    if (window.ethereum) {
+      try {
+        const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+        setWalletAddress(accounts[0]);
+      } catch (error) {
+        console.error("Wallet connection error:", error);
+      }
+    } else {
+      alert("MetaMask not detected. Please install MetaMask.");
+    }
+  }
+
   return (
-    <div>
+    <div style={{ padding: 20 }}>
       <h1>DPNS Buy DApp</h1>
-      <p>Welcome! Connect your wallet to begin.</p>
+      {!walletAddress ? (
+        <button onClick={connectWallet}>Connect Wallet</button>
+      ) : (
+        <p>Connected: {walletAddress}</p>
+      )}
     </div>
   );
 }
