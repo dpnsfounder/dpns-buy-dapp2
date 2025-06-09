@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import Web3 from "web3";
+import WalletConnectProvider from "@walletconnect/web3-provider";
+import { verifyTransactionHash } from "./verifyTransaction";
 
 // Stablecoin token contracts on BNB Chain (BEP-20)
 const TOKEN_CONTRACTS = {
@@ -29,130 +31,88 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [isVerified, setIsVerified] = useState(false);
 
-  const DPNS_WALLET = "0x9E45AdD5FC16Bb899E215824630A7b84eB15ca50".toLowerCase();
+  const DPNS_WALLET = "0x9e45ad8d5fc16bb89b215824630a7b84eb15ca50".toLowerCase();
   const MIN_AMOUNT = 25;
 
   const connectWallet = async () => {
-    if (window.ethereum) {
-      try {
-        const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
-        setWalletAddress(accounts[0]);
-        setStatus("✅ Wallet connected.");
-      } catch {
-        setStatus("❌ Wallet connection failed.");
+    try {
+      let provider;
+
+      const isMobile = /Mobi|Android|iPhone/i.test(navigator.userAgent);
+
+      if (window.ethereum && !isMobile) {
+        provider = window.ethereum;
+        await provider.request({ method: "eth_requestAccounts" });
+      } else {
+        provider = new WalletConnectProvider({
+          rpc: {
+            56: "https://bsc-dataseed.binance.org/"
+          },
+          chainId: 56
+        });
+
+        await provider.enable();
       }
-    } else {
-      alert("Please install MetaMask.");
+
+      const web3 = new Web3(provider);
+      const accounts = await web3.eth.getAccounts();
+      setWalletAddress(accounts[0]);
+
+      provider.on("disconnect", () => {
+        setWalletAddress("");
+      });
+
+    } catch (err) {
+      console.error("❌ Wallet connection failed:", err);
     }
   };
 
-  const verifyTransaction = async () => {
-    if (!txHash || txHash.length !== 66) {
-      setStatus("❌ Invalid transaction hash.");
-      return;
-    }
-
-    setLoading(true);
-    setStatus("⏳ Verifying...");
-
+  const handleVerify = async () => {
     try {
-      const web3 = new Web3("https://bsc-dataseed.binance.org/");
-      const receipt = await web3.eth.getTransactionReceipt(txHash);
-      if (!receipt || !receipt.status) {
-        setStatus("❌ Transaction not confirmed yet.");
-        setLoading(false);
-        return;
-      }
+      setStatus("");
+      setLoading(true);
 
-      const logs = receipt.logs;
-
-      let matchFound = false;
-
-      for (const [symbol, address] of Object.entries(TOKEN_CONTRACTS)) {
-        const contract = new web3.eth.Contract(ERC20_ABI, address);
-
-        for (let log of logs) {
-          try {
-            const parsed = contract._decodeEventABI.call(
-              {
-                name: "Transfer",
-                jsonInterface: ERC20_ABI[0],
-              },
-              log
-            );
-
-            const from = parsed.from.toLowerCase();
-            const to = parsed.to.toLowerCase();
-            const value = Web3.utils.fromWei(parsed.value, "ether");
-
-            if (
-              to === DPNS_WALLET &&
-              from === walletAddress.toLowerCase() &&
-              parseFloat(value) >= MIN_AMOUNT
-            ) {
-              setIsVerified(true);
-              setStatus(`✅ Verified: ${symbol} transfer of $${value}`);
-              matchFound = true;
-              break;
-            }
-          } catch {}
-        }
-
-        if (matchFound) break;
-      }
-
-      if (!matchFound) {
-        setStatus("❌ No valid token transfer found to DPNS wallet.");
+      const result = await verifyTransactionHash(txHash, walletAddress, DPNS_WALLET, MIN_AMOUNT, TOKEN_CONTRACTS, ERC20_ABI);
+      if (result.verified) {
+        setStatus("✅ Transaction verified! You will receive your DPNS.");
+        setIsVerified(true);
+      } else {
+        setStatus("❌ Verification failed. " + result.reason);
         setIsVerified(false);
       }
-    } catch (err) {
-      setStatus("❌ Error verifying transaction.");
-      console.error(err);
-    }
 
-    setLoading(false);
+    } catch (err) {
+      console.error("Error verifying transaction:", err);
+      setStatus("❌ Something went wrong. Please try again later.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div style={{ padding: 20, fontFamily: "Arial", maxWidth: 600, margin: "auto" }}>
-      <h1>Buy DPNS (Stablecoin Payment)</h1>
+    <div style={{ padding: "20px", fontFamily: "Arial" }}>
+      <h1>DPNS Buy DApp</h1>
 
       {!walletAddress ? (
-        <button onClick={connectWallet} style={{ padding: 10, fontSize: 16 }}>
-          Connect Wallet
-        </button>
+        <button onClick={connectWallet}>Connect Wallet</button>
       ) : (
-        <p><strong>Connected:</strong> {walletAddress}</p>
+        <p>Connected: {walletAddress}</p>
       )}
 
       <input
         type="text"
-        placeholder="Paste transaction hash"
+        placeholder="Enter your transaction hash"
         value={txHash}
         onChange={(e) => setTxHash(e.target.value)}
-        style={{ width: "100%", padding: 10, fontSize: 14, marginTop: 20 }}
+        style={{ width: "100%", marginTop: "20px", padding: "10px" }}
       />
 
-      <button
-        onClick={verifyTransaction}
-        disabled={loading || !walletAddress}
-        style={{
-          padding: 10,
-          fontSize: 16,
-          marginTop: 10,
-          backgroundColor: "#007bff",
-          color: "#fff",
-          border: "none",
-          cursor: "pointer"
-        }}
-      >
+      <button onClick={handleVerify} disabled={loading || !walletAddress}>
         {loading ? "Verifying..." : "Submit Transaction"}
       </button>
 
       {status && (
-        <div style={{ marginTop: 20, fontWeight: "bold", color: isVerified ? "green" : "black" }}>
-          {status}
-        </div>
+        <p style={{ marginTop: "20px", color: isVerified ? "green" : "red" }}>{status}</p>
       )}
     </div>
   );
