@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import WalletConnectProvider from "@walletconnect/web3-provider";
 import Web3 from "web3";
+import { verifyTransactionHash } from "./verifyTransaction";
 
 export default function App() {
   const [walletAddress, setWalletAddress] = useState("");
@@ -9,7 +10,9 @@ export default function App() {
   const connectMetaMask = async () => {
     if (window.ethereum) {
       try {
-        const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+        const accounts = await window.ethereum.request({
+          method: "eth_requestAccounts",
+        });
         setWalletAddress(accounts[0]);
       } catch (err) {
         alert("MetaMask connection failed.");
@@ -32,7 +35,6 @@ export default function App() {
       const accounts = await web3.eth.getAccounts();
       setWalletAddress(accounts[0]);
 
-      // Optional: close session when done
       provider.on("disconnect", () => {
         setWalletAddress("");
       });
@@ -42,8 +44,16 @@ export default function App() {
   };
 
   const handleClaim = () => {
-    if (!txHash) return alert("Please enter a transaction hash.");
-    alert(`✅ Transaction hash submitted: ${txHash}\n\n(Verification logic coming soon)`);
+    if (!txHash) {
+      alert("Please enter a transaction hash.");
+      return;
+    }
+
+    if (verifyTransactionHash(txHash)) {
+      alert("✅ Transaction verified! DPNS will be credited.");
+    } else {
+      alert("❌ Transaction not recognized. Please check your hash.");
+    }
   };
 
   return (
@@ -51,7 +61,9 @@ export default function App() {
       <h1>DPNS Buy DApp</h1>
       {walletAddress ? (
         <>
-          <p>Connected: <b>{walletAddress}</b></p>
+          <p>
+            Connected: <b>{walletAddress}</b>
+          </p>
           <input
             type="text"
             placeholder="Paste BNB transaction hash"
